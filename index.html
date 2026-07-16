@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, interactive-widget=resizes-content">
+    <meta name="description" content="hanekawa - asisten AI cepat, gratis, dan blak-blakan.">
+    <meta name="theme-color" content="#FFDE59">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="hanekawa">
+    <link rel="icon" type="image/png" href="/static/favicon-96x96.png?v=3" sizes="96x96">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=3">
+    <link rel="shortcut icon" href="/static/favicon.ico?v=3">
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png?v=3">
+    <link rel="manifest" href="/static/site.webmanifest?v=3">
+    <title>hanekawa — asisten AI kamu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=3">
+</head>
+<body>
+    <div class="bg-dots"></div>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </span>
+                <span class="logo-text">hanekawa</span>
+            </div>
+            <button class="icon-btn sidebar-close" id="sidebarClose" aria-label="Tutup menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+                    <path d="M18 6L6 18M6 6l12 12" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="sidebar-content">
+            <button class="btn-new-chat" id="btnClear">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+                    <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+                </svg>
+                <span>Percakapan baru</span>
+            </button>
+            <div class="history-section">
+                <span class="history-label">Riwayat</span>
+                <div class="chat-history-list" id="chatHistoryList"></div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer">
+            <div class="info-card mono">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span id="currentTime"></span>
+            </div>
+            <div class="info-card mono" id="memoryInfo" style="display:none;">
+                <span id="memoryCount">0 pesan</span>
+                <span class="info-label">tersimpan</span>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <div class="top-bar">
+            <button class="icon-btn hamburger-btn" id="hamburgerToggle" aria-label="Buka menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <button class="icon-btn new-chat-btn" id="btnClearTop" aria-label="Percakapan baru">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+                    <path d="M12 5v14M5 12h14" stroke-linecap="round"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message" id="welcomeMessage">
+                    <div class="welcome-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <h2>Halo! Saya hanekawa 👋</h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <div class="image-preview" id="imagePreview" hidden>
+                <img id="imagePreviewThumb" alt="Gambar terlampir">
+                <span class="image-preview-label">Gambar siap dikirim</span>
+                <button type="button" class="image-preview-remove" id="btnRemoveImage" aria-label="Hapus gambar">✕</button>
+            </div>
+            <div class="input-wrapper">
+                <input type="file" id="imageFileInput" accept="image/*" hidden>
+                <button class="btn-attach" id="btnAttach" aria-label="Lampirkan gambar" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="19" height="19">
+                        <path d="M21.44 11.05l-9.19 9.19a5 5 0 01-7.07-7.07l9.19-9.19a3.5 3.5 0 014.95 4.95l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button class="btn-imagegen" id="btnImageGen" aria-label="Mode buat gambar" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="19" height="19">
+                        <rect x="3" y="3" width="18" height="18" rx="3"/>
+                        <circle cx="8.5" cy="8.5" r="1.5"/>
+                        <path d="M21 15l-5-5L5 21" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <textarea id="userInput" placeholder="Ketik pesan kamu..." rows="1" maxlength="8000" enterkeyhint="send"></textarea>
+                <button class="btn-stop" id="btnStop" aria-label="Berhenti" hidden>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                </button>
+                <button class="btn-send" id="btnSend" aria-label="Kirim pesan">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M22 2 11 13" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M22 2 15 22l-4-9-9-4 20-7z" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+            <span class="input-hint">Enter buat kirim · Shift+Enter baris baru</span>
+        </div>
+    </main>
+
+    <div class="install-banner" id="installBanner">
+        <div class="install-banner-content">
+            <span>📱 Install hanekawa di HP kamu</span>
+            <button id="btnInstall">Install</button>
+            <button id="btnDismiss" aria-label="Tutup">✕</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Environment
+.env
+.env.local
+.env*.local
+
+# Vercel
+.vercel
+
+# Dependencies (kalau nanti nambahin package.json)
+node_modules/
+
+# OS / editor
+.DS_Store
+*.log
