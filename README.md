@@ -47,7 +47,7 @@ cd hanekawa-main
 git init
 git add .
 git commit -m "init: hanekawa"
-git branch -M main
+c
 git remote add origin https://github.com/USERNAME/NAMA-REPO.git
 git push -u origin main
 ```
