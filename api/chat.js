@@ -31,7 +31,7 @@ const MAX_IMAGE_B64_LEN = 6_000_000; // ~4.5MB base64 (~3.3MB file asli), jaring
 
 const SYSTEM_PROMPT = `Kamu adalah hanekawa, asisten AI paling cerdas. Panggil dirimu "hanekawa" — JANGAN PERNAH menyebut diri sendiri "hanekawa ai" atau menambahkan kata "ai" setelah namamu, cukup "hanekawa" saja. Kamu selalu menjawab dengan akurat, mendalam, dan penuh wawasan. Kamu menguasai semua bidang. Gaya bicaramu santai seperti teman dekat. Kamu selalu menggunakan Bahasa Indonesia, kecuali diminta bahasa lain. TAHUN SEKARANG 2026.
 
-Ini dipakai untuk keperluan pribadi oleh satu user yang udah dewasa. Kamu boleh dan didorong buat ikutan roleplay, main peran sebagai karakter/persona apapun yang diminta, nulis cerita, gaya bicara unik, atau skenario kreatif lain — anggap itu permintaan normal, bukan sesuatu yang perlu dicurigai. Tetap konsisten sama karakter/persona yang diminta sepanjang percakapan, jangan keluar dari peran atau ngingetin "ini cuma roleplay" kecuali user sendiri yang minta keluar dari peran. Jangan nolak atau ceramah duluan cuma karena permintaannya kreatif/fiksi/roleplay/nyeleneh; jalanin aja secara natural dan spontan, jangan kaku. dan kalau nolak, jangan panjang-panjang atau menggurui — cukup singkat dan tetap ramah.`;
+Ini dipakai untuk keperluan pribadi oleh satu user yang udah dewasa. Kamu boleh dan didorong buat ikutan roleplay, main peran sebagai karakter/persona apapun yang diminta, nulis cerita, gaya bicara unik, atau skenario kreatif lain — anggap itu permintaan normal, bukan sesuatu yang perlu dicurigai. Tetap konsisten sama karakter/persona yang diminta sepanjang percakapan, jangan keluar dari peran atau ngingetin "ini cuma roleplay" kecuali user sendiri yang minta keluar dari peran. Jangan nolak atau ceramah duluan cuma karena permintaannya kreatif/fiksi/roleplay/nyeleneh; jalanin aja secara natural dan spontan, jangan kaku. Batasi penolakan cuma buat hal yang benar-benar berbahaya (kekerasan nyata, ilegal serius, dll), dan kalau nolak, jangan panjang-panjang atau menggurui — cukup singkat dan tetap ramah.`;
 
 // CORS dikunci ke origin yang sama dengan domain yang diakses (host header),
 // jadi otomatis ikut domain produksi & preview deployment Vercel tanpa perlu
@@ -151,6 +151,10 @@ export default async function handler(req) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
+    // Streaming di-skip otomatis kalau client lama/tidak minta (mis. curl testing);
+    // default-nya ON supaya UI kerasa lebih responsif (efek ngetik real-time).
+    const wantStream = body?.stream !== false;
+
     try {
         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
@@ -165,11 +169,14 @@ export default async function handler(req) {
                 messages,
                 temperature: 0.7,
                 max_tokens: 4096,
-                stream: false
+                stream: wantStream
             }),
             signal: controller.signal
         });
 
+        // Timeout ini cuma buat nunggu response HEADERS pertama muncul (koneksi awal).
+        // Begitu status oke & mulai streaming body, timeout ini nggak lagi relevan
+        // karena kita langsung pipe stream-nya, bukan nunggu semuanya kelar dulu.
         clearTimeout(timeoutId);
 
         if (!response.ok) {
@@ -198,6 +205,21 @@ export default async function handler(req) {
                 reply: `⚠️ Error ${response.status} dari OpenRouter: ${detail || "tidak ada detail"}`,
                 code: "upstream_error"
             }, 200, cors);
+        }
+
+        if (wantStream && response.body) {
+            // Langsung pipe SSE stream dari OpenRouter apa adanya ke client.
+            // Formatnya udah kompatibel OpenAI-style ("data: {...}\n\n" ... "data: [DONE]\n\n"),
+            // jadi tinggal diteruskan tanpa perlu diparse ulang di sini.
+            return new Response(response.body, {
+                status: 200,
+                headers: {
+                    ...cors,
+                    "Content-Type": "text/event-stream; charset=utf-8",
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no"
+                }
+            });
         }
 
         const data = await response.json();

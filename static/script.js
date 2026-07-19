@@ -54,8 +54,12 @@
     const imagePreviewThumb = document.getElementById("imagePreviewThumb");
     const btnRemoveImage = document.getElementById("btnRemoveImage");
     const btnImageGen = document.getElementById("btnImageGen");
+    const btnVoice = document.getElementById("btnVoice");
+    const btnExport = document.getElementById("btnExport");
+    const historySearchInput = document.getElementById("historySearch");
 
     let isProcessing = false;
+    let historyFilter = "";
     let chatHistory = [];       // { role: "user"|"assistant", content: string } -- pesan percakapan yang sedang aktif
     let conversations = [];     // { id, title, messages, updatedAt } -- daftar semua percakapan tersimpan
     let activeConversationId = null;
@@ -408,14 +412,25 @@
     function renderHistoryList() {
         if (!chatHistoryList) return;
         chatHistoryList.innerHTML = "";
-        if (conversations.length === 0) {
+
+        const q = historyFilter.trim().toLowerCase();
+        const list = q
+            ? conversations.filter((conv) => {
+                if ((conv.title || "").toLowerCase().includes(q)) return true;
+                return (conv.messages || []).some(
+                    (m) => typeof m.content === "string" && m.content.toLowerCase().includes(q)
+                );
+            })
+            : conversations;
+
+        if (list.length === 0) {
             const empty = document.createElement("p");
             empty.classList.add("history-empty");
-            empty.textContent = "Belum ada riwayat";
+            empty.textContent = q ? "Tidak ada percakapan yang cocok" : "Belum ada riwayat";
             chatHistoryList.appendChild(empty);
             return;
         }
-        conversations.forEach((conv) => {
+        list.forEach((conv) => {
             const item = document.createElement("div");
             item.classList.add("chat-history-item");
             if (conv.id === activeConversationId) item.classList.add("active");
@@ -448,11 +463,19 @@
             bindSuggestionChips();
             return;
         }
-        for (const msg of chatHistory) {
-            if (msg && (msg.role === "user" || msg.role === "assistant") && typeof msg.content === "string") {
-                createBubble(msg.role, msg.content);
+        const lastIndex = chatHistory.length - 1;
+        chatHistory.forEach((msg, i) => {
+            if (!msg || (msg.role !== "user" && msg.role !== "assistant") || typeof msg.content !== "string") return;
+            const opts = { historyIndex: i };
+            if (msg.role === "assistant" && i === lastIndex && !msg.content.startsWith(IMG_MARKER)) {
+                const prev = chatHistory[i - 1];
+                if (prev && prev.role === "user" && typeof prev.content === "string") {
+                    opts.canRegenerate = true;
+                    opts.regenPrompt = prev.content;
+                }
             }
-        }
+            createBubble(msg.role, msg.content, opts);
+        });
     }
 
     function switchConversation(id) {
@@ -529,6 +552,84 @@
 
     if (btnClear) btnClear.addEventListener("click", () => startNewConversation());
     if (btnClearTop) btnClearTop.addEventListener("click", () => startNewConversation());
+
+    if (historySearchInput) {
+        historySearchInput.addEventListener("input", () => {
+            historyFilter = historySearchInput.value || "";
+            renderHistoryList();
+        });
+    }
+
+    /* ========== EXPORT PERCAKAPAN ========== */
+    function exportConversation() {
+        if (!chatHistory.length) return;
+        const conv = getActiveConversation();
+        const title = (conv && conv.title) || "Percakapan hanekawa";
+        const lines = [`# ${title}`, ""];
+        chatHistory.forEach((m) => {
+            if (!m || typeof m.content !== "string") return;
+            const who = m.role === "user" ? "**Kamu**" : "**hanekawa**";
+            const text = m.content.startsWith(IMG_MARKER) ? `*(gambar hasil AI: ${m.content.slice(IMG_MARKER.length)})*` : m.content;
+            lines.push(`${who}:`, text, "");
+        });
+        try {
+            const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const safeName = title.replace(/[^\w\-]+/g, "_").slice(0, 50) || "percakapan-hanekawa";
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${safeName}.md`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+        } catch { /* download API tidak tersedia, biarkan saja */ }
+    }
+    if (btnExport) btnExport.addEventListener("click", exportConversation);
+
+    /* ========== VOICE INPUT (Web Speech API) ========== */
+    const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let isRecording = false;
+
+    if (SpeechRecognitionImpl && btnVoice) {
+        btnVoice.hidden = false;
+        recognition = new SpeechRecognitionImpl();
+        recognition.lang = "id-ID";
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.addEventListener("result", (e) => {
+            let transcript = "";
+            for (let i = 0; i < e.results.length; i++) transcript += e.results[i][0].transcript;
+            transcript = transcript.trim();
+            if (!transcript) return;
+            const sep = userInput.value && !/\s$/.test(userInput.value) ? " " : "";
+            userInput.value = (userInput.value + sep + transcript).trim();
+            autoResize();
+        });
+        recognition.addEventListener("end", () => {
+            isRecording = false;
+            btnVoice.classList.remove("active");
+        });
+        recognition.addEventListener("error", () => {
+            isRecording = false;
+            btnVoice.classList.remove("active");
+        });
+
+        btnVoice.addEventListener("click", () => {
+            if (isProcessing) return;
+            if (isRecording) {
+                recognition.stop();
+                return;
+            }
+            try {
+                recognition.start();
+                isRecording = true;
+                btnVoice.classList.add("active");
+            } catch { /* sudah jalan / mic diblokir, abaikan */ }
+        });
+    }
 
     function bindSuggestionChips() {
         document.querySelectorAll(".suggestion-chip").forEach((chip) => {
@@ -662,6 +763,40 @@
                 });
                 actions.appendChild(retryBtn);
             }
+
+            if (!isError && opts.canRegenerate && opts.regenPrompt && typeof opts.historyIndex === "number") {
+                const regenBtn = document.createElement("button");
+                regenBtn.type = "button";
+                regenBtn.classList.add("message-action-btn");
+                regenBtn.textContent = "↻ Ulang";
+                regenBtn.addEventListener("click", () => {
+                    if (isProcessing) return;
+                    truncateFrom(opts.historyIndex, div);
+                    sendMessage(opts.regenPrompt, { skipUserBubble: true, skipHistoryPush: true });
+                });
+                actions.appendChild(regenBtn);
+            }
+            body.appendChild(actions);
+        } else if (bubbleRole === "user" && !isError && !opts.imageUrl && typeof opts.historyIndex === "number") {
+            const actions = document.createElement("div");
+            actions.classList.add("message-actions", "message-actions-user");
+
+            const editBtn = document.createElement("button");
+            editBtn.type = "button";
+            editBtn.classList.add("message-action-btn");
+            editBtn.textContent = "✎ Edit";
+            editBtn.addEventListener("click", () => {
+                if (isProcessing) return;
+                truncateFrom(opts.historyIndex, div);
+                if (chatMessages.children.length === 0) {
+                    chatMessages.innerHTML = WELCOME_HTML;
+                    bindSuggestionChips();
+                }
+                userInput.value = content;
+                autoResize();
+                userInput.focus();
+            });
+            actions.appendChild(editBtn);
             body.appendChild(actions);
         }
 
@@ -671,6 +806,85 @@
         if (typeof gsap !== "undefined") gsap.from(div, { opacity: 0, y: 16, duration: 0.3, ease: "power2.out" });
         scrollBottom();
         return contentDiv;
+    }
+
+    // Hapus riwayat chat dari index tertentu dan seterusnya (dipakai buat Edit & Regenerate),
+    // beserta bubble DOM yang bersangkutan ke bawah.
+    function truncateFrom(idx, fromNode) {
+        chatHistory = chatHistory.slice(0, idx);
+        syncActiveConversation();
+        let node = fromNode;
+        while (node) {
+            const next = node.nextSibling;
+            node.remove();
+            node = next;
+        }
+    }
+
+    /* ========== STREAMING (SSE) ========== */
+    function createStreamingBubble() {
+        removeWelcome();
+        const div = document.createElement("div");
+        div.classList.add("message", "assistant");
+        const avatar = document.createElement("div");
+        avatar.classList.add("message-avatar");
+        avatar.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+        const body = document.createElement("div");
+        body.classList.add("message-body");
+        const contentDiv = document.createElement("div");
+        contentDiv.classList.add("message-content");
+        contentDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+        body.appendChild(contentDiv);
+        div.appendChild(avatar);
+        div.appendChild(body);
+        chatMessages.appendChild(div);
+        scrollBottom();
+        return { div, body, contentDiv };
+    }
+
+    // Baca stream SSE dari /api/chat dan render progresif ke contentDiv.
+    // Return teks lengkap setelah stream selesai (dipakai buat disimpan ke history).
+    async function streamAssistantReply(response, contentDiv) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullText = "";
+        let rafPending = false;
+
+        const flush = () => {
+            rafPending = false;
+            contentDiv.innerHTML = renderMarkdown(fullText) + '<span class="stream-caret"></span>';
+            scrollBottom();
+        };
+        const scheduleFlush = () => {
+            if (rafPending) return;
+            rafPending = true;
+            (window.requestAnimationFrame || setTimeout)(flush, 0);
+        };
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+            for (const rawLine of lines) {
+                const line = rawLine.trim();
+                if (!line.startsWith("data:")) continue;
+                const payload = line.slice(5).trim();
+                if (!payload || payload === "[DONE]") continue;
+                try {
+                    const evt = JSON.parse(payload);
+                    const delta = evt?.choices?.[0]?.delta?.content;
+                    if (typeof delta === "string" && delta) {
+                        fullText += delta;
+                        scheduleFlush();
+                    }
+                } catch { /* baris keep-alive / parsial, abaikan */ }
+            }
+        }
+        contentDiv.innerHTML = renderMarkdown(fullText);
+        return fullText;
     }
 
     function addTyping() {
@@ -732,7 +946,7 @@
             userInput.style.overflowY = "hidden";
         }
 
-        if (!options.skipUserBubble) createBubble("user", prompt || "🖼️ (gambar tanpa keterangan)", { imageUrl: imageToSend });
+        if (!options.skipUserBubble) createBubble("user", prompt || "🖼️ (gambar tanpa keterangan)", { imageUrl: imageToSend, historyIndex: chatHistory.length });
         if (!options.skipHistoryPush) {
             // Gambar asli TIDAK disimpan ke riwayat/localStorage (biar gak jebol kuota storage),
             // cukup ditandai teks placeholder-nya aja.
@@ -752,12 +966,48 @@
             const response = await fetch("/api/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ prompt, image: imageToSend || undefined, history: historyBeforeThisTurn }),
+                body: JSON.stringify({ prompt, image: imageToSend || undefined, history: historyBeforeThisTurn, stream: true }),
                 signal: controller.signal
             });
             clearTimeout(timeout);
-            removeTyping();
 
+            const contentType = response.headers.get("content-type") || "";
+            const canRegenerate = !imageToSend && Boolean(prompt);
+            const assistantIndex = chatHistory.length; // posisi yang akan ditempati balasan ini
+
+            // ===== Jalur streaming: jawaban muncul progresif (efek ngetik) =====
+            if (response.ok && contentType.includes("text/event-stream")) {
+                removeTyping();
+                const { div, contentDiv } = createStreamingBubble();
+                let fullText = "";
+                try {
+                    fullText = await streamAssistantReply(response, contentDiv);
+                } catch {
+                    div.remove();
+                    createBubble("error", "📡 Koneksi terputus saat menerima jawaban. Coba lagi ya.", { retryPrompt: prompt });
+                    lastFailedPrompt = prompt;
+                    scrollBottom();
+                    return;
+                }
+
+                const reply = fullText.trim().replace(/^\s*hanekawa(\s*ai)?\s*:\s*/i, "");
+                if (!reply) {
+                    div.remove();
+                    createBubble("error", "Tidak ada respon dari AI, coba kirim ulang ya.", { retryPrompt: prompt });
+                    lastFailedPrompt = prompt;
+                } else {
+                    div.remove();
+                    createBubble("assistant", reply, { canRegenerate, regenPrompt: prompt, historyIndex: assistantIndex });
+                    chatHistory.push({ role: "assistant", content: reply });
+                    syncActiveConversation();
+                    lastFailedPrompt = null;
+                }
+                scrollBottom();
+                return;
+            }
+
+            // ===== Jalur non-streaming: dipakai untuk respon error (selalu JSON) =====
+            removeTyping();
             let data = null;
             try { data = await response.json(); } catch { /* non-JSON response */ }
 
@@ -778,7 +1028,7 @@
                 createBubble("error", reply, { retryPrompt: prompt });
                 lastFailedPrompt = prompt;
             } else {
-                createBubble("assistant", reply);
+                createBubble("assistant", reply, { canRegenerate, regenPrompt: prompt, historyIndex: assistantIndex });
                 chatHistory.push({ role: "assistant", content: reply });
                 syncActiveConversation();
                 lastFailedPrompt = null;

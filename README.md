@@ -47,7 +47,7 @@ cd hanekawa-main
 git init
 git add .
 git commit -m "init: hanekawa"
-c
+git branch -M main
 git remote add origin https://github.com/USERNAME/NAMA-REPO.git
 git push -u origin main
 ```
@@ -79,6 +79,17 @@ Selesai, buka `xxx.vercel.app` yang dikasih Vercel.
 - **CORS dikunci ke domain sendiri**: `api/chat.js` sekarang cuma ngizinin request dari origin yang sama dengan domain yang diakses (dicek dari header `Host`), bukan `*` lagi. Jadi domain lain gak bisa numpang manggil API ini pakai API key/credit OpenRouter kita.
 - **Fix sanitasi input**: sebelumnya karakter `<` dan `>` di-strip dari prompt user, jadi pertanyaan soal kode (`<div>`, `List<T>`, dll) kepotong. Sekarang gak di-strip lagi karena render di frontend sudah aman (DOMPurify men-sanitize semua konten — user & AI — sebelum masuk DOM).
 - Rate limiting server-side **belum** ditambahin (sengaja di-skip dulu) — masih perlu ditambah kalau nanti butuh proteksi lebih terhadap abuse/spam.
+
+## Update terbaru (fitur baru)
+
+- **Streaming response**: jawaban AI sekarang muncul progresif (efek ngetik real-time) lewat SSE, bukan nunggu selesai baru muncul sekaligus. Backend (`api/chat.js`) langsung pipe stream dari OpenRouter apa adanya.
+- **Regenerate jawaban** (`↻ Ulang`): muncul di balasan AI terakhir, buat minta jawaban baru dari prompt yang sama.
+- **Edit pesan** (`✎ Edit`): muncul di pesan kamu, buat ubah & kirim ulang — otomatis menghapus balasan setelahnya (kayak ChatGPT).
+- **Voice input**: tombol mic 🎤 di sebelah kolom chat (pakai Web Speech API browser). Otomatis disembunyikan kalau browser/HP gak support (mis. Safari iOS).
+- **Export percakapan**: tombol di sidebar buat download percakapan aktif jadi file `.md`.
+- **Search riwayat**: kolom pencarian di atas daftar riwayat sidebar, nyari dari judul & isi pesan.
+- Ikon situs (favicon, apple-touch-icon, dll) diganti jadi huruf **"H"** gaya neubrutalism.
+- Rate limiting sengaja **tidak** ditambahin karena project ini dipakai pribadi.
 
 ## Yang dibenerin di versi ini
 
